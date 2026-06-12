@@ -10,7 +10,7 @@ from app.models.user import User
 from app.schemas.opportunity import (
     OpportunityCreate, OpportunityUpdate, OpportunityResponse,
     OpportunityTransition, LifecycleHistoryResponse, TransitionResponse,
-    LeadTransferRequest,
+    LeadTransferRequest, OpportunityDetailResponse, OpportunityOwnershipBrief,
 )
 from app.services.opportunity import OpportunityService
 
@@ -55,6 +55,20 @@ def list_opportunities(
 ):
     opps = service.list_opportunities(db, skip, limit)
     return [OpportunityResponse.model_validate(o) for o in opps]
+
+
+@router.get("/{opportunity_id}/detail", response_model=OpportunityDetailResponse)
+def get_opportunity_detail(
+    opportunity_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    opp, history, ownership = service.get_opportunity_detail(db, opportunity_id)
+    return OpportunityDetailResponse(
+        opportunity=OpportunityResponse.model_validate(opp),
+        history=[LifecycleHistoryResponse.model_validate(h) for h in history],
+        ownership=OpportunityOwnershipBrief.model_validate(ownership) if ownership else None,
+    )
 
 
 @router.get("/{opportunity_id}", response_model=OpportunityResponse)

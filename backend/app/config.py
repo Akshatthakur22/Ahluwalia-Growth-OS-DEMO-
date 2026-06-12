@@ -5,8 +5,9 @@ from typing import List
 class Settings(BaseSettings):
     # Database
     database_url: str
-    database_pool_size: int = 20
-    database_max_overflow: int = 10
+    database_pool_size: int = 5
+    database_max_overflow: int = 5
+    database_pool_recycle: int = 300
     
     # JWT
     jwt_secret_key: str

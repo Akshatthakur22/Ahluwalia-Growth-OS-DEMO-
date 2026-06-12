@@ -11,6 +11,22 @@ class MeetingType(str, enum.Enum):
     VIDEO_CALL = "video_call"
 
 
+class MetWithType(str, enum.Enum):
+    OWNER = "owner"
+    BUILDER = "builder"
+    ARCHITECT = "architect"
+    DESIGNER = "designer"
+
+
+class RelationshipStage(str, enum.Enum):
+    NEW = "new"
+    INTRODUCTORY = "introductory"
+    RAPPORT_BUILDING = "rapport_building"
+    ACTIVE_ENGAGEMENT = "active_engagement"
+    TRUSTED = "trusted"
+    STRATEGIC = "strategic"
+
+
 class Meeting(BaseModel):
     __tablename__ = "meetings"
 
@@ -18,8 +34,15 @@ class Meeting(BaseModel):
     conducted_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     meeting_date = Column(DateTime(timezone=True), nullable=False)
     meeting_type = Column(String(50), nullable=True)
+    met_with = Column(String(50), nullable=True)
     stakeholder_name = Column(String(200), nullable=False)
     stakeholder_mobile = Column(String(20), nullable=True)
+    firm_name = Column(String(200), nullable=True)
+    address = Column(String(500), nullable=True)
+    area = Column(String(100), nullable=True)
+    city = Column(String(100), nullable=True)
+    category = Column(String(10), nullable=True)
+    relationship_stage = Column(String(50), nullable=True)
     summary = Column(Text, nullable=True)
     follow_up_date = Column(DateTime(timezone=True), nullable=True)
     relationship_score = Column(String(50), nullable=True)

@@ -28,6 +28,14 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_assignments_assigned_to ON assignments (assigned_to)",
     "CREATE INDEX IF NOT EXISTS ix_ownership_marketing ON ownership_records (marketing_owner_id)",
     "CREATE INDEX IF NOT EXISTS ix_ownership_sales ON ownership_records (sales_owner_id)",
+    "CREATE INDEX IF NOT EXISTS ix_ownership_lead_creator ON ownership_records (lead_creator_id)",
+    "CREATE INDEX IF NOT EXISTS ix_contacts_site_type ON contacts (site_id, contact_type)",
+    "CREATE INDEX IF NOT EXISTS ix_users_status_role ON users (status, role)",
+    "CREATE INDEX IF NOT EXISTS ix_users_role ON users (role)",
+    "CREATE INDEX IF NOT EXISTS ix_assignments_assigned_at ON assignments (assigned_at DESC)",
+    "CREATE INDEX IF NOT EXISTS ix_lifecycle_opp_changed ON lifecycle_history (opportunity_id, changed_at DESC)",
+    "CREATE INDEX IF NOT EXISTS ix_showroom_site_id ON showroom_visits (site_id)",
+    "CREATE INDEX IF NOT EXISTS ix_opportunities_revenue ON opportunities (expected_revenue DESC NULLS LAST) WHERE current_status != 'lost'",
 ]
 
 

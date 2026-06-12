@@ -1,14 +1,8 @@
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, text
-from app.models.attendance import AttendanceLog
-from app.models.site import Site
-from app.models.meeting import Meeting
 from app.models.opportunity import Opportunity, OpportunityStatus
-from app.models.user import User, EmploymentStatus, Role
-from app.models.showroom_visit import ShowroomVisit
-from app.models.assignment import Assignment
-from app.models.ownership import OwnershipRecord
+from app.models.user import User, Role
 from app.repositories.opportunity import OpportunityRepository
 
 ALL_STATUSES = [s.value for s in OpportunityStatus]
@@ -19,8 +13,8 @@ QUOTATION_STATES = (
     OpportunityStatus.NEGOTIATION.value,
 )
 
-# Single round-trip snapshot for ops counts (Neon latency optimization)
-OPS_SNAPSHOT_SQL = text("""
+# Ops snapshot + pipeline status counts in one Neon round-trip
+EXEC_SNAPSHOT_SQL = text("""
 SELECT
   (SELECT COUNT(*) FROM users WHERE status::text IN ('active', 'ACTIVE')) AS total_users,
   (SELECT COUNT(DISTINCT user_id) FROM attendance_logs WHERE check_in_time >= :today_start) AS checked_in_today,
@@ -32,7 +26,47 @@ SELECT
   (SELECT COUNT(*) FROM opportunities WHERE follow_up_date IS NOT NULL AND follow_up_date < :now AND current_status != 'lost') AS overdue_opp_followups,
   (SELECT COUNT(*) FROM meetings WHERE follow_up_date IS NOT NULL AND follow_up_date < :now) AS overdue_meeting_followups,
   (SELECT COUNT(*) FROM showroom_visits WHERE visit_date >= :month_start) AS showroom_this_month,
-  (SELECT COUNT(*) FROM assignments) AS active_assignments
+  (SELECT COUNT(*) FROM assignments) AS active_assignments,
+  (SELECT COALESCE(json_object_agg(current_status, cnt), '{}'::json) FROM (
+    SELECT current_status, COUNT(*)::int AS cnt FROM opportunities GROUP BY current_status
+  ) p) AS pipeline_json
+""")
+
+FIELD_DASH_SQL = text("""
+SELECT
+  (SELECT COUNT(*)::int FROM sites WHERE discovered_by = :uid) AS my_sites,
+  (SELECT COUNT(*)::int FROM sites WHERE discovered_by = :uid AND created_at >= :month_start) AS month_sites,
+  (SELECT COUNT(*)::int FROM attendance_logs WHERE user_id = :uid AND check_in_time >= :month_start) AS check_ins,
+  (SELECT EXISTS(
+    SELECT 1 FROM attendance_logs WHERE user_id = :uid AND check_in_time >= :today_start
+  )) AS checked_today,
+  (SELECT COUNT(*)::int FROM sites) AS total_sites
+""")
+
+MARKETING_DASH_SQL = text("""
+SELECT
+  (SELECT COUNT(*)::int FROM assignments WHERE assigned_to = :uid) AS my_assignments,
+  (SELECT COUNT(*)::int FROM meetings WHERE conducted_by = :uid) AS my_meetings,
+  (SELECT COUNT(*)::int FROM meetings WHERE conducted_by = :uid AND meeting_date >= :month_start) AS month_meetings,
+  (SELECT COUNT(*)::int FROM ownership_records WHERE marketing_owner_id = :uid) AS owned,
+  (SELECT COUNT(*)::int FROM opportunities WHERE current_status IN ('relationship_building', 'showroom_visit_scheduled')) AS marketing_stages
+""")
+
+SALES_DASH_SQL = text("""
+SELECT
+  (SELECT COUNT(*)::int FROM showroom_visits WHERE sales_executive_id = :uid) AS visits,
+  (SELECT COUNT(*)::int FROM showroom_visits WHERE sales_executive_id = :uid AND visit_date >= :month_start) AS month_visits,
+  (SELECT COUNT(*)::int FROM ownership_records WHERE sales_owner_id = :uid) AS owned,
+  (SELECT COUNT(*)::int FROM opportunities WHERE current_status IN (
+    'showroom_visit_done', 'selection_done', 'quotation_sent', 'negotiation'
+  )) AS in_sales,
+  (SELECT COUNT(*)::int FROM opportunities WHERE current_status = 'quotation_sent') AS quotations,
+  (SELECT COALESCE(SUM(expected_revenue), 0) FROM opportunities WHERE current_status IN (
+    'showroom_visit_done', 'selection_done', 'quotation_sent', 'negotiation', 'order_confirmed'
+  )) AS sales_revenue,
+  (SELECT COALESCE(json_object_agg(current_status, cnt), '{}'::json) FROM (
+    SELECT current_status, COUNT(*)::int AS cnt FROM opportunities GROUP BY current_status
+  ) p) AS pipeline_json
 """)
 
 
@@ -50,13 +84,22 @@ class DashboardService:
     def _zero_fill_pipeline(self, counts: dict) -> dict:
         return {status: counts.get(status, 0) for status in ALL_STATUSES}
 
-    def _ops_snapshot(self, db: Session) -> dict:
+    def _pipeline_from_json(self, raw) -> dict:
+        if not raw:
+            return self._zero_fill_pipeline({})
+        if isinstance(raw, dict):
+            return self._zero_fill_pipeline({k: int(v) for k, v in raw.items()})
+        return self._zero_fill_pipeline({})
+
+    def _exec_snapshot(self, db: Session) -> tuple[dict, dict]:
         today_start, month_start, now = self._time_bounds()
         row = db.execute(
-            OPS_SNAPSHOT_SQL,
+            EXEC_SNAPSHOT_SQL,
             {"today_start": today_start, "month_start": month_start, "now": now},
         ).mappings().one()
-        return dict(row)
+        data = dict(row)
+        pipeline = self._pipeline_from_json(data.pop("pipeline_json", None))
+        return data, pipeline
 
     def _revenue_metrics(self, db: Session) -> dict:
         active = Opportunity.current_status != LOST
@@ -90,8 +133,7 @@ class DashboardService:
         }
 
     def get_executive_dashboard(self, db: Session) -> dict:
-        snap = self._ops_snapshot(db)
-        pipeline = self._zero_fill_pipeline(self.opportunity_repo.count_by_status(db))
+        snap, pipeline = self._exec_snapshot(db)
         revenue = self._revenue_metrics(db)
 
         confirmed = pipeline.get("order_confirmed", 0)
@@ -147,8 +189,7 @@ class DashboardService:
         }
 
     def get_manager_dashboard(self, db: Session) -> dict:
-        snap = self._ops_snapshot(db)
-        pipeline = self._zero_fill_pipeline(self.opportunity_repo.count_by_status(db))
+        snap, pipeline = self._exec_snapshot(db)
 
         total_users = int(snap["total_users"] or 0)
         checked_in = int(snap["checked_in_today"] or 0)
@@ -189,91 +230,45 @@ class DashboardService:
 
     def get_role_dashboard(self, db: Session, user: User) -> dict:
         today_start, month_start, _ = self._time_bounds()
+        params = {"uid": user.id, "today_start": today_start, "month_start": month_start}
 
         if user.role == Role.FIELD_EXECUTIVE:
-            my_sites = db.query(func.count(Site.id)).filter(Site.discovered_by == user.id).scalar() or 0
-            month_sites = db.query(func.count(Site.id)).filter(
-                Site.discovered_by == user.id, Site.created_at >= month_start
-            ).scalar() or 0
-            check_ins = db.query(func.count(AttendanceLog.id)).filter(
-                AttendanceLog.user_id == user.id,
-                AttendanceLog.check_in_time >= month_start,
-            ).scalar() or 0
-            checked_today = db.query(AttendanceLog.id).filter(
-                AttendanceLog.user_id == user.id,
-                AttendanceLog.check_in_time >= today_start,
-            ).first() is not None
-            total_sites = db.query(func.count(Site.id)).scalar() or 0
+            row = db.execute(FIELD_DASH_SQL, params).mappings().one()
             return {
                 "role": user.role.value,
                 "cards": [
-                    {"label": "Sites Discovered", "value": str(my_sites), "subtitle": f"{month_sites} this month", "accent": "green"},
-                    {"label": "Check-ins", "value": str(check_ins), "subtitle": "This month", "accent": "blue"},
-                    {"label": "Today", "value": "Checked In" if checked_today else "Not Yet", "subtitle": "Attendance status", "accent": "purple" if checked_today else "gray"},
-                    {"label": "Active Sites", "value": str(total_sites), "subtitle": "Team portfolio", "accent": "orange"},
+                    {"label": "Sites Discovered", "value": str(row["my_sites"]), "subtitle": f"{row['month_sites']} this month", "accent": "green"},
+                    {"label": "Check-ins", "value": str(row["check_ins"]), "subtitle": "This month", "accent": "blue"},
+                    {"label": "Today", "value": "Checked In" if row["checked_today"] else "Not Yet", "subtitle": "Attendance status", "accent": "purple" if row["checked_today"] else "gray"},
+                    {"label": "Active Sites", "value": str(row["total_sites"]), "subtitle": "Team portfolio", "accent": "orange"},
                 ],
             }
 
         if user.role == Role.MARKETING_EXECUTIVE:
-            my_assignments = db.query(func.count(Assignment.id)).filter(Assignment.assigned_to == user.id).scalar() or 0
-            my_meetings = db.query(func.count(Meeting.id)).filter(Meeting.conducted_by == user.id).scalar() or 0
-            month_meetings = db.query(func.count(Meeting.id)).filter(
-                Meeting.conducted_by == user.id, Meeting.meeting_date >= month_start
-            ).scalar() or 0
-            owned = db.query(func.count(OwnershipRecord.id)).filter(
-                OwnershipRecord.marketing_owner_id == user.id
-            ).scalar() or 0
-            marketing_stages = db.query(func.count(Opportunity.id)).filter(
-                Opportunity.current_status.in_([
-                    OpportunityStatus.RELATIONSHIP_BUILDING.value,
-                    OpportunityStatus.SHOWROOM_VISIT_SCHEDULED.value,
-                ])
-            ).scalar() or 0
+            row = db.execute(MARKETING_DASH_SQL, params).mappings().one()
             return {
                 "role": user.role.value,
                 "cards": [
-                    {"label": "My Assignments", "value": str(my_assignments), "subtitle": "Active sites", "accent": "purple"},
-                    {"label": "Meetings Held", "value": str(my_meetings), "subtitle": f"{month_meetings} this month", "accent": "blue"},
-                    {"label": "My Pipeline", "value": str(owned), "subtitle": "Owned opportunities", "accent": "green"},
-                    {"label": "In Marketing", "value": str(marketing_stages), "subtitle": "Early-stage deals", "accent": "orange"},
+                    {"label": "My Assignments", "value": str(row["my_assignments"]), "subtitle": "Active sites", "accent": "purple"},
+                    {"label": "Meetings Held", "value": str(row["my_meetings"]), "subtitle": f"{row['month_meetings']} this month", "accent": "blue"},
+                    {"label": "My Pipeline", "value": str(row["owned"]), "subtitle": "Owned opportunities", "accent": "green"},
+                    {"label": "In Marketing", "value": str(row["marketing_stages"]), "subtitle": "Early-stage deals", "accent": "orange"},
                 ],
             }
 
         if user.role == Role.SALES_EXECUTIVE:
-            sales_stages = [
-                OpportunityStatus.SHOWROOM_VISIT_DONE.value,
-                OpportunityStatus.SELECTION_DONE.value,
-                OpportunityStatus.QUOTATION_SENT.value,
-                OpportunityStatus.NEGOTIATION.value,
-            ]
-            visits = db.query(func.count(ShowroomVisit.id)).filter(
-                ShowroomVisit.sales_executive_id == user.id
-            ).scalar() or 0
-            month_visits = db.query(func.count(ShowroomVisit.id)).filter(
-                ShowroomVisit.sales_executive_id == user.id,
-                ShowroomVisit.visit_date >= month_start,
-            ).scalar() or 0
-            owned = db.query(func.count(OwnershipRecord.id)).filter(
-                OwnershipRecord.sales_owner_id == user.id
-            ).scalar() or 0
-            in_sales = db.query(func.count(Opportunity.id)).filter(
-                Opportunity.current_status.in_(sales_stages)
-            ).scalar() or 0
-            quotations = db.query(func.count(Opportunity.id)).filter(
-                Opportunity.current_status == OpportunityStatus.QUOTATION_SENT.value
-            ).scalar() or 0
-            sales_revenue = db.query(func.coalesce(func.sum(Opportunity.expected_revenue), 0)).filter(
-                Opportunity.current_status.in_(sales_stages + [CONFIRMED])
-            ).scalar()
+            row = db.execute(SALES_DASH_SQL, params).mappings().one()
+            pipeline = self._pipeline_from_json(row["pipeline_json"])
+            sales_revenue = float(row["sales_revenue"] or 0)
             return {
                 "role": user.role.value,
                 "cards": [
-                    {"label": "Showroom Visits", "value": str(visits), "subtitle": f"{month_visits} this month", "accent": "orange"},
-                    {"label": "My Accounts", "value": str(owned), "subtitle": "Sales-owned deals", "accent": "blue"},
-                    {"label": "In Sales Stage", "value": str(in_sales), "subtitle": "Active negotiations", "accent": "purple"},
-                    {"label": "Quotations Out", "value": str(quotations), "subtitle": f"₹{float(sales_revenue or 0)/100000:.1f}L pipeline", "accent": "green"},
+                    {"label": "Showroom Visits", "value": str(row["visits"]), "subtitle": f"{row['month_visits']} this month", "accent": "orange"},
+                    {"label": "My Accounts", "value": str(row["owned"]), "subtitle": "Sales-owned deals", "accent": "blue"},
+                    {"label": "In Sales Stage", "value": str(row["in_sales"]), "subtitle": "Active negotiations", "accent": "purple"},
+                    {"label": "Quotations Out", "value": str(row["quotations"]), "subtitle": f"₹{sales_revenue/100000:.1f}L pipeline", "accent": "green"},
                 ],
-                "pipeline_summary": self._zero_fill_pipeline(self.opportunity_repo.count_by_status(db)),
+                "pipeline_summary": pipeline,
             }
 
         return {"role": user.role.value, "cards": []}

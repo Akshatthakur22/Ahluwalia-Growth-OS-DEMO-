@@ -3,6 +3,7 @@ from fastapi import HTTPException, status
 from app.models.user import User, Role
 from app.repositories.meeting import MeetingRepository
 from app.repositories.site import SiteRepository
+from app.repositories.contact import ContactRepository
 from app.schemas.meeting import MeetingCreate, MeetingUpdate
 from app.models.opportunity import OpportunityStatus
 from app.services.audit import AuditService
@@ -13,8 +14,27 @@ class MeetingService:
     def __init__(self):
         self.repo = MeetingRepository()
         self.site_repo = SiteRepository()
+        self.contact_repo = ContactRepository()
         self.audit = AuditService()
         self.lifecycle = LifecycleAutomation()
+
+    def _sync_meeting_contact(self, db: Session, site_id, data: MeetingCreate):
+        if not data.met_with or not data.stakeholder_name or not data.stakeholder_mobile:
+            return
+        payload = {
+            "name": data.stakeholder_name,
+            "mobile_number": data.stakeholder_mobile,
+            "contact_type": data.met_with,
+            "firm_name": data.firm_name,
+            "address": data.address,
+            "category": data.category,
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+        existing = self.contact_repo.get_by_site_and_type(db, site_id, data.met_with)
+        if existing:
+            self.contact_repo.update(db, existing, payload)
+        else:
+            self.contact_repo.create(db, {"site_id": site_id, **payload})
 
     def create_meeting(self, db: Session, user: User, data: MeetingCreate):
         if not self.site_repo.get(db, str(data.site_id)):
@@ -22,6 +42,7 @@ class MeetingService:
         meeting_data = data.model_dump()
         meeting_data["conducted_by"] = user.id
         meeting = self.repo.create(db, meeting_data)
+        self._sync_meeting_contact(db, data.site_id, data)
         self.audit.log(db, user_id=user.id, entity_type="meeting", entity_id=meeting.id, action="create", new_value=meeting_data)
         self.lifecycle.advance_to(
             db, data.site_id, OpportunityStatus.RELATIONSHIP_BUILDING.value, user,

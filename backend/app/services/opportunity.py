@@ -118,6 +118,12 @@ class OpportunityService:
         self.get_opportunity(db, opportunity_id)
         return self.lifecycle_repo.get_by_opportunity(db, opportunity_id)
 
+    def get_opportunity_detail(self, db: Session, opportunity_id: str):
+        opp = self.get_opportunity(db, opportunity_id)
+        history = self.lifecycle_repo.get_by_opportunity(db, opportunity_id)
+        ownership = self.ownership_repo.get_by_opportunity(db, opportunity_id)
+        return opp, history, ownership
+
     def get_ownership(self, db: Session, opportunity_id: str):
         self.get_opportunity(db, opportunity_id)
         record = self.ownership_repo.get_by_opportunity(db, opportunity_id)

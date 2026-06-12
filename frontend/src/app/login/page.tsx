@@ -8,11 +8,11 @@ import { Input } from '@/components/ui/Input';
 import { Alert } from '@/components/ui/Alert';
 
 const DEMO_ACCOUNTS = [
-  { role: 'Field Executive', mobile: '9876543210', password: 'password123' },
-  { role: 'Marketing', mobile: '9876543211', password: 'password123' },
-  { role: 'Sales', mobile: '9876543212', password: 'password123' },
-  { role: 'Manager', mobile: '9876543213', password: 'password123' },
-  { role: 'CEO', mobile: '9876543214', password: 'password123' },
+  { role: 'Field Executive', name: 'Rohit Sain', mobile: '9876543210', password: 'password123' },
+  { role: 'Marketing Associate', name: 'Namita Kaushal', mobile: '9876543211', password: 'password123' },
+  { role: 'Showroom Sales Associate', name: 'Rakesh Pandey', mobile: '9876543212', password: 'password123' },
+  { role: 'Manager', name: 'Vikram Patel', mobile: '9876543213', password: 'password123' },
+  { role: 'CEO', name: 'Pritpal Singh', mobile: '9876543214', password: 'password123' },
 ];
 
 export default function LoginPage() {
@@ -72,8 +72,8 @@ export default function LoginPage() {
                 onClick={() => fillDemo(a.mobile)}
                 className="w-full text-left px-4 py-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors border border-gray-100"
               >
-                <span className="font-medium text-gray-900 text-sm">{a.role}</span>
-                <span className="text-gray-500 text-xs block mt-0.5">{a.mobile} · password123</span>
+                <span className="font-medium text-gray-900 text-sm">{a.name}</span>
+                <span className="text-gray-500 text-xs block mt-0.5">{a.role} · {a.mobile}</span>
               </button>
             ))}
           </div>

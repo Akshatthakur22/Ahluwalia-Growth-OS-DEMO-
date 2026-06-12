@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import api from '@/lib/api';
+import { fetchTeamAttendancePageData } from '@/lib/query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -40,10 +40,10 @@ export default function TeamAttendancePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/attendance/team-page-data')
-      .then((res) => {
-        setSummary(res.data.summary);
-        setRecords(res.data.today_records);
+    fetchTeamAttendancePageData()
+      .then((data) => {
+        setSummary(data.summary);
+        setRecords(data.today_records);
       })
       .catch((err) => setError(err.response?.data?.detail || 'Failed to load team attendance'))
       .finally(() => setLoading(false));

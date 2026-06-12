@@ -9,7 +9,7 @@ import { Alert } from '@/components/ui/Alert';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { PipelineBar } from '@/components/ui/PipelineBar';
 import { ExecutiveDashboard } from '@/components/dashboard/ExecutiveDashboard';
-import { fetchExecutiveDashboard, fetchManagerDashboard } from '@/lib/query';
+import { fetchExecutiveDashboard, fetchManagerDashboard, fetchRoleDashboard } from '@/lib/query';
 
 function SkeletonCards({ count = 4 }: { count?: number }) {
   return (
@@ -98,9 +98,7 @@ export default function DashboardPage() {
         } else if (isManager) {
           setManagerData(await fetchManagerDashboard());
         } else {
-          const { default: api } = await import('@/lib/api');
-          const { data } = await api.get('/dashboard/role');
-          setRoleDash(data);
+          setRoleDash(await fetchRoleDashboard(user.role));
         }
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load dashboard');

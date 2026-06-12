@@ -17,6 +17,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LIFECYCLE_FLOW, formatStatus, getDemoTransitionOptions, getRecommendedNext, canTransitionLifecycle } from '@/lib/lifecycle';
 import { formatINR } from '@/lib/format';
 import { MetricCard } from '@/components/ui/MetricCard';
+import { fetchOpportunities, fetchOpportunityDetail, invalidateCache } from '@/lib/query';
 
 interface Opportunity {
   id: string;
@@ -75,7 +76,7 @@ export default function OpportunitiesPage() {
 
   const load = async () => {
     try {
-      const { data } = await api.get('/opportunities');
+      const data = await fetchOpportunities();
       setOpportunities(data);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to load pipeline');
@@ -98,12 +99,9 @@ export default function OpportunitiesPage() {
     });
     setError('');
     try {
-      const [histRes, ownRes] = await Promise.all([
-        api.get(`/opportunities/${opp.id}/history`),
-        api.get(`/opportunities/${opp.id}/ownership`),
-      ]);
-      setHistory(histRes.data);
-      setOwnership(ownRes.data);
+      const detail = await fetchOpportunityDetail(opp.id);
+      setHistory(detail.history || []);
+      setOwnership(detail.ownership || null);
     } catch {
       setHistory([]);
       setOwnership(null);
@@ -124,8 +122,9 @@ export default function OpportunitiesPage() {
       setSelected(data);
       setOpportunities((prev) => prev.map((o) => (o.id === data.id ? { ...o, ...data } : o)));
       setSuccess('Lead transferred to sales — pipeline advanced to Showroom Visit Scheduled');
-      const { data: hist } = await api.get(`/opportunities/${selected.id}/history`);
-      setHistory(hist);
+      invalidateCache('opportunities:');
+      const detail = await fetchOpportunityDetail(selected.id);
+      setHistory(detail.history || []);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Lead transfer failed');
     } finally {
@@ -150,6 +149,7 @@ export default function OpportunitiesPage() {
       setSelected(data);
       setOpportunities((prev) => prev.map((o) => (o.id === data.id ? { ...o, ...data } : o)));
       setSuccess('Deal details updated');
+      invalidateCache('opportunities:');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to update deal');
     } finally {
@@ -167,8 +167,9 @@ export default function OpportunitiesPage() {
       setSuccess(`Moved to ${formatStatus(newStatus)}`);
       setSelected({ ...selected, current_status: newStatus });
       setOpportunities((prev) => prev.map((o) => (o.id === selected.id ? { ...o, current_status: newStatus } : o)));
-      const { data } = await api.get(`/opportunities/${selected.id}/history`);
-      setHistory(data);
+      invalidateCache('opportunities:');
+      const detail = await fetchOpportunityDetail(selected.id);
+      setHistory(detail.history || []);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Transition failed');
     } finally {

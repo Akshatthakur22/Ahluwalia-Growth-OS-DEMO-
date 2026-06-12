@@ -46,11 +46,11 @@ def seed_database():
         db.add(admin)
 
         users_data = [
-            ("FE001", "Rajesh Kumar", "9876543210", Role.FIELD_EXECUTIVE, "Field Operations"),
-            ("ME001", "Priya Sharma", "9876543211", Role.MARKETING_EXECUTIVE, "Marketing"),
-            ("SE001", "Amit Singh", "9876543212", Role.SALES_EXECUTIVE, "Sales"),
+            ("FE001", "Rohit Sain", "9876543210", Role.FIELD_EXECUTIVE, "Field Operations"),
+            ("ME001", "Namita Kaushal", "9876543211", Role.MARKETING_EXECUTIVE, "Marketing"),
+            ("SE001", "Rakesh Pandey", "9876543212", Role.SALES_EXECUTIVE, "Showroom Sales"),
             ("MG001", "Vikram Patel", "9876543213", Role.MANAGER, "Management"),
-            ("CEO001", "Ahluwalia CEO", "9876543214", Role.CEO, "Executive"),
+            ("CEO001", "Pritpal Singh", "9876543214", Role.CEO, "Executive"),
         ]
         users = {}
         for code, name, mobile, role, dept in users_data:

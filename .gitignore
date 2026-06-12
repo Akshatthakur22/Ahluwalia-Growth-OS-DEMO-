@@ -28,7 +28,10 @@ env/
 
 # FastAPI
 .env
+.env.local
+.env.*.local
 .alembic/
+backend/uploads/
 
 # Node
 node_modules/

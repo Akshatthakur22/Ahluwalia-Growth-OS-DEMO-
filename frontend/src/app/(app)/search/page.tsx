@@ -90,7 +90,8 @@ export default function SearchPage() {
   const timeline = results ? [
     ...(results.meetings || []).map((m: any) => ({
       type: 'meeting', date: m.meeting_date, title: m.stakeholder_name,
-      subtitle: m.summary || 'Meeting recorded', icon: '🤝',
+      subtitle: [m.met_with && `Met: ${m.met_with}`, m.firm_name, m.summary].filter(Boolean).join(' · ') || 'Meeting recorded',
+      icon: '🤝',
     })),
     ...(results.showroom_visits || []).map((v: any) => ({
       type: 'showroom', date: v.visit_date, title: v.selected_material || 'Showroom visit',

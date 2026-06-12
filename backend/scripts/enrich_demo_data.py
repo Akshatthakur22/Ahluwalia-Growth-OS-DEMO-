@@ -36,7 +36,10 @@ DEMO_SITES = [
         "address": "Sector 77, Southern Peripheral Road",
         "city": "Gurgaon",
         "area": "Sector 77",
-        "stage": "finishing",
+        "stage": "70",
+        "current_vendor": "R K Marble",
+        "material_used": "Italian Botticino",
+        "purchase_rate": 285,
         "type": "residential",
         "size": 850000,
         "requirement": "Italian marble for 120 apartments — lobby, lift lobbies, master baths",
@@ -53,7 +56,10 @@ DEMO_SITES = [
         "address": "Udyog Vihar Phase 5",
         "city": "Gurgaon",
         "area": "Udyog Vihar",
-        "stage": "structure",
+        "stage": "50",
+        "current_vendor": "Somany Ceramics",
+        "material_used": "Engineered quartz",
+        "purchase_rate": 195,
         "type": "commercial",
         "size": 1200000,
         "requirement": "Engineered quartz & granite for 8-floor corporate campus",
@@ -70,7 +76,10 @@ DEMO_SITES = [
         "address": "DLF Phase 1, Nathupur Road",
         "city": "Gurgaon",
         "area": "DLF Phase 1",
-        "stage": "finishing",
+        "stage": "70",
+        "current_vendor": "R K Marble",
+        "material_used": "Italian Botticino",
+        "purchase_rate": 285,
         "type": "residential",
         "size": 320000,
         "requirement": "Imported marble for 24 luxury villas",
@@ -87,7 +96,10 @@ DEMO_SITES = [
         "address": "MG Road, Sikanderpur",
         "city": "Gurgaon",
         "area": "MG Road",
-        "stage": "finishing",
+        "stage": "70",
+        "current_vendor": "R K Marble",
+        "material_used": "Italian Botticino",
+        "purchase_rate": 285,
         "type": "commercial",
         "size": 450000,
         "requirement": "High-traffic flooring — granite & composite marble",
@@ -104,7 +116,10 @@ DEMO_SITES = [
         "address": "Ambience Island, NH-48",
         "city": "Gurgaon",
         "area": "Ambience Island",
-        "stage": "structure",
+        "stage": "50",
+        "current_vendor": "Somany Ceramics",
+        "material_used": "Engineered quartz",
+        "purchase_rate": 195,
         "type": "commercial",
         "size": 950000,
         "requirement": "Lobby & banquet marble — 5-star specification",
@@ -121,7 +136,10 @@ DEMO_SITES = [
         "address": "Sohna Road, Sector 49",
         "city": "Gurgaon",
         "area": "Sector 49",
-        "stage": "planning",
+        "stage": "10",
+        "current_vendor": None,
+        "material_used": None,
+        "purchase_rate": None,
         "type": "residential",
         "size": 180000,
         "requirement": "Phase 2 extension — 80 units, budget segment",
@@ -138,7 +156,10 @@ DEMO_SITES = [
         "address": "Old Delhi Road, Sector 14",
         "city": "Gurgaon",
         "area": "Sector 14",
-        "stage": "foundation",
+        "stage": "30",
+        "current_vendor": "Asian Granito",
+        "material_used": "Composite marble",
+        "purchase_rate": 165,
         "type": "mixed_use",
         "size": 600000,
         "requirement": "Retail + office mixed development",
@@ -290,7 +311,7 @@ def enrich():
             skyline_opp.current_status = OpportunityStatus.RELATIONSHIP_BUILDING.value
             skyline_opp.expected_revenue = Decimal("5000000")
             skyline_opp.probability_of_conversion = Decimal("35")
-            skyline.site_stage = "planning"
+            skyline.site_stage = "10"
             skyline.project_size = Decimal("750000")
             skyline.estimated_requirement = "Corporate lobby & cafeteria marble — 12 floors"
             ownership = db.query(OwnershipRecord).filter(
@@ -312,6 +333,9 @@ def enrich():
                 project_type=spec["type"],
                 project_size=Decimal(str(spec["size"])) if spec.get("size") else None,
                 estimated_requirement=spec.get("requirement"),
+                current_vendor=spec.get("current_vendor"),
+                material_used=spec.get("material_used"),
+                purchase_rate=Decimal(str(spec["purchase_rate"])) if spec.get("purchase_rate") else None,
                 competitor_brand=spec.get("competitor"),
                 site_remarks=spec.get("remarks"),
                 discovered_by=fe.id,
@@ -366,7 +390,17 @@ def enrich():
                     mobile_number=mobile,
                     firm_name=firm,
                     designation=designation,
+                    category="A" if ctype == "builder" else ("B" if ctype == "architect" else None),
+                    address="Gurgaon, Haryana" if ctype == "owner" else None,
                 ))
+
+        SCORE_TO_STAGE = {
+            "excellent": "trusted",
+            "good": "active_engagement",
+            "average": "rapport_building",
+            "poor": "introductory",
+            "new": "new",
+        }
 
         # Meetings — rich history per site
         meeting_templates = [
@@ -377,16 +411,27 @@ def enrich():
         ]
         all_sites = list(created_sites.values())
         for i, site in enumerate(all_sites):
+            site_contacts = CONTACTS_BY_SITE.get(site.site_name, [("Client", "builder", "9800000000", "Unknown Firm", "")])
             for j, (mtype, summary, score) in enumerate(meeting_templates[: 2 + (i % 3)]):
                 days = 60 - (i * 7 + j * 5)
                 if days < 3:
                     days = 3 + j
+                name, ctype, mobile, firm, _designation = site_contacts[j % len(site_contacts)]
+                category = "A" if ctype == "builder" else ("B" if ctype == "architect" else "C")
                 db.add(Meeting(
                     site_id=site.id,
                     conducted_by=me.id if me else fe.id,
                     meeting_date=_days_ago(days, hour=11 + j),
                     meeting_type=mtype,
-                    stakeholder_name=CONTACTS_BY_SITE.get(site.site_name, [("Client", "", "", "", "")])[0][0],
+                    met_with=ctype,
+                    stakeholder_name=name,
+                    stakeholder_mobile=mobile,
+                    firm_name=firm,
+                    address=site.address,
+                    area=site.area,
+                    city=site.city,
+                    category=category,
+                    relationship_stage=SCORE_TO_STAGE.get(score, "rapport_building"),
                     summary=summary,
                     relationship_score=score,
                     follow_up_date=_days_ago(days - 7) if days > 10 else None,

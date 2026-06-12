@@ -6,6 +6,8 @@ Business Operating System for Ahluwalia Marbles.
 
 Ahluwalia Growth OS is a centralized business operating platform designed to streamline and digitize core operations including employee attendance, field-force activities, marketing efforts, showroom sales processes, training initiatives, and management reporting.
 
+**Deploy to production:** see [DEPLOY.md](./DEPLOY.md) for Vercel + Render + Neon setup.
+
 ## Project Structure
 
 ```
@@ -113,11 +115,21 @@ Once the backend is running, visit:
 ## User Roles
 
 - Field Executive
-- Marketing Executive
-- Sales Executive
+- Marketing Associate
+- Showroom Sales Associate
 - Manager
 - CEO
 - Administrator
+
+### Demo logins (password: `password123`)
+
+| Role | Name | Mobile |
+|------|------|--------|
+| Field Executive | Rohit Sain | 9876543210 |
+| Marketing Associate | Namita Kaushal | 9876543211 |
+| Showroom Sales Associate | Rakesh Pandey | 9876543212 |
+| Manager | Vikram Patel | 9876543213 |
+| CEO | Pritpal Singh | 9876543214 |
 
 ## Core Features
 

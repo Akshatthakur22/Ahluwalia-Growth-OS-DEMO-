@@ -9,8 +9,15 @@ class MeetingCreate(BaseModel):
     site_id: uuid.UUID
     meeting_date: datetime
     meeting_type: Optional[str] = None
+    met_with: Optional[str] = None
     stakeholder_name: str
     stakeholder_mobile: Optional[str] = None
+    firm_name: Optional[str] = None
+    address: Optional[str] = None
+    area: Optional[str] = None
+    city: Optional[str] = None
+    category: Optional[str] = None
+    relationship_stage: Optional[str] = None
     summary: Optional[str] = None
     follow_up_date: Optional[datetime] = None
     relationship_score: Optional[str] = None
@@ -29,8 +36,15 @@ class MeetingCreate(BaseModel):
 class MeetingUpdate(BaseModel):
     meeting_date: Optional[datetime] = None
     meeting_type: Optional[str] = None
+    met_with: Optional[str] = None
     stakeholder_name: Optional[str] = None
     stakeholder_mobile: Optional[str] = None
+    firm_name: Optional[str] = None
+    address: Optional[str] = None
+    area: Optional[str] = None
+    city: Optional[str] = None
+    category: Optional[str] = None
+    relationship_stage: Optional[str] = None
     summary: Optional[str] = None
     follow_up_date: Optional[datetime] = None
     relationship_score: Optional[str] = None
@@ -52,8 +66,15 @@ class MeetingResponse(BaseModel):
     conducted_by: Optional[uuid.UUID] = None
     meeting_date: datetime
     meeting_type: Optional[str] = None
+    met_with: Optional[str] = None
     stakeholder_name: str
     stakeholder_mobile: Optional[str] = None
+    firm_name: Optional[str] = None
+    address: Optional[str] = None
+    area: Optional[str] = None
+    city: Optional[str] = None
+    category: Optional[str] = None
+    relationship_stage: Optional[str] = None
     summary: Optional[str] = None
     follow_up_date: Optional[datetime] = None
     relationship_score: Optional[str] = None

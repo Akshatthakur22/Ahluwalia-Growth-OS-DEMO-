@@ -5,11 +5,12 @@ import enum
 
 
 class SiteStage(str, enum.Enum):
-    PLANNING = "planning"
-    FOUNDATION = "foundation"
-    STRUCTURE = "structure"
-    FINISHING = "finishing"
-    COMPLETED = "completed"
+    """PDF: project stage by completion timeline (days)."""
+    DAYS_10 = "10"
+    DAYS_30 = "30"
+    DAYS_50 = "50"
+    DAYS_70 = "70"
+    DAYS_100 = "100"
 
 
 class ProjectType(str, enum.Enum):
@@ -35,6 +36,9 @@ class Site(BaseModel):
     project_type = Column(String(50), nullable=True)
     project_size = Column(Numeric(15, 2), nullable=True)
     estimated_requirement = Column(String(500), nullable=True)
+    current_vendor = Column(String(200), nullable=True)
+    material_used = Column(String(500), nullable=True)
+    purchase_rate = Column(Numeric(15, 2), nullable=True)
     competitor_brand = Column(String(200), nullable=True)
     competitor_quantity = Column(String(200), nullable=True)
     site_remarks = Column(String(1000), nullable=True)

@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { captureGeolocation } from '@/lib/geolocation';
 import { cleanPayload } from '@/lib/form';
+import {
+  MET_WITH_OPTIONS,
+  MEETING_CATEGORIES,
+  RELATIONSHIP_STAGES,
+  metWithLabel,
+  relationshipStageLabel,
+  meetingTypeLabel,
+} from '@/lib/meeting';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -14,17 +22,23 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { fetchSitesLookup, siteLookupMap } from '@/lib/query';
+import { fetchSitesLookup, fetchMeetings, siteLookupMap } from '@/lib/query';
 
 interface Meeting {
   id: string;
   site_id: string;
+  met_with?: string;
   stakeholder_name: string;
   stakeholder_mobile?: string;
+  firm_name?: string;
+  address?: string;
+  area?: string;
+  city?: string;
+  category?: string;
+  relationship_stage?: string;
   meeting_date: string;
   meeting_type?: string;
   summary?: string;
-  relationship_score?: string;
   influence_score?: number;
   opportunity_score?: number;
   loyalty_score?: number;
@@ -42,10 +56,16 @@ const EMPTY_FORM = {
   site_id: '',
   meeting_date: '',
   meeting_type: 'site_visit',
+  met_with: 'builder',
   stakeholder_name: '',
   stakeholder_mobile: '',
+  firm_name: '',
+  address: '',
+  area: '',
+  city: 'Gurgaon',
+  category: 'B',
+  relationship_stage: 'rapport_building',
   summary: '',
-  relationship_score: 'good',
   influence_score: '',
   opportunity_score: '',
   loyalty_score: '',
@@ -59,6 +79,57 @@ const EMPTY_FORM = {
   remarks: '',
 };
 
+function stakeholderFromDetail(detail: any, metWith: string) {
+  const sh = detail.stakeholders || {};
+  const site = detail;
+  if (metWith === 'owner') {
+    return {
+      stakeholder_name: sh.owner_name || '',
+      stakeholder_mobile: sh.owner_mobile || '',
+      firm_name: '',
+      address: sh.owner_address || '',
+      area: site.area || '',
+      city: site.city || 'Gurgaon',
+      category: 'A',
+    };
+  }
+  if (metWith === 'builder') {
+    return {
+      stakeholder_name: sh.builder_name || '',
+      stakeholder_mobile: sh.builder_mobile || '',
+      firm_name: sh.builder_firm_name || '',
+      address: '',
+      area: site.area || '',
+      city: site.city || 'Gurgaon',
+      category: sh.builder_category || 'A',
+    };
+  }
+  if (metWith === 'architect') {
+    return {
+      stakeholder_name: sh.architect_name || '',
+      stakeholder_mobile: sh.architect_mobile || '',
+      firm_name: sh.architect_firm_name || '',
+      address: '',
+      area: site.area || '',
+      city: site.city || 'Gurgaon',
+      category: sh.architect_category || 'B',
+    };
+  }
+  const contact = (detail.contacts || []).find((c: any) => c.contact_type === metWith);
+  if (contact) {
+    return {
+      stakeholder_name: contact.name || '',
+      stakeholder_mobile: contact.mobile_number || '',
+      firm_name: contact.firm_name || '',
+      address: contact.address || '',
+      area: site.area || '',
+      city: site.city || 'Gurgaon',
+      category: contact.category || 'C',
+    };
+  }
+  return { area: site.area || '', city: site.city || 'Gurgaon' };
+}
+
 export default function MeetingsPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -67,20 +138,45 @@ export default function MeetingsPage() {
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [capturingGps, setCapturingGps] = useState(false);
+  const [prefilling, setPrefilling] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
-    Promise.all([api.get('/meetings'), fetchSitesLookup()])
+    Promise.all([fetchMeetings(), fetchSitesLookup()])
       .then(([m, s]) => {
-        setMeetings(m.data);
+        setMeetings(m);
         setSites(s);
         setSiteMap(siteLookupMap(s));
       })
       .catch((err) => setError(err.response?.data?.detail || 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
+
+  const prefillStakeholder = async (siteId: string, metWith: string) => {
+    if (!siteId || !metWith) return;
+    setPrefilling(true);
+    try {
+      const { data } = await api.get(`/sites/${siteId}/detail`);
+      const fields = stakeholderFromDetail(data, metWith);
+      setForm((f) => ({ ...f, ...fields }));
+    } catch {
+      /* keep manual entry */
+    } finally {
+      setPrefilling(false);
+    }
+  };
+
+  const handleSiteChange = (siteId: string) => {
+    setForm((f) => ({ ...f, site_id: siteId }));
+    if (siteId && form.met_with) prefillStakeholder(siteId, form.met_with);
+  };
+
+  const handleMetWithChange = (metWith: string) => {
+    setForm((f) => ({ ...f, met_with: metWith }));
+    if (form.site_id) prefillStakeholder(form.site_id, metWith);
+  };
 
   const captureGps = () => {
     setCapturingGps(true);
@@ -126,7 +222,7 @@ export default function MeetingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start gap-4">
-        <PageHeader title="Meetings" subtitle="Marketing relationship engine — scores, GPS, showroom commitments" />
+        <PageHeader title="Meetings" subtitle="PDF-complete stakeholder meetings — met with, firm, location, category & relationship stage" />
         <Button onClick={() => setShowForm(!showForm)} size="sm">{showForm ? 'Cancel' : '+ Record'}</Button>
       </div>
 
@@ -137,12 +233,12 @@ export default function MeetingsPage() {
         <Card title="New Meeting">
           <form onSubmit={handleSubmit} className="space-y-5">
             <FormSection title="Meeting Details">
-              <Select label="Site *" value={form.site_id} onChange={(e) => setForm({ ...form, site_id: e.target.value })} required>
+              <Select label="Site *" value={form.site_id} onChange={(e) => handleSiteChange(e.target.value)} required>
                 <option value="">Select site</option>
                 {sites.map((s) => <option key={s.id} value={s.id}>{s.site_name}</option>)}
               </Select>
               <div className="grid grid-cols-2 gap-4">
-                <Select label="Meeting Type" value={form.meeting_type} onChange={(e) => setForm({ ...form, meeting_type: e.target.value })}>
+                <Select label="Channel (How)" value={form.meeting_type} onChange={(e) => setForm({ ...form, meeting_type: e.target.value })}>
                   <option value="site_visit">Site Visit</option>
                   <option value="office_visit">Office Visit</option>
                   <option value="phone_call">Phone Call</option>
@@ -153,18 +249,34 @@ export default function MeetingsPage() {
               <Input label="Time Spent (minutes)" type="number" value={form.time_spent_minutes} onChange={(e) => setForm({ ...form, time_spent_minutes: e.target.value })} placeholder="e.g. 45" />
             </FormSection>
 
-            <FormSection title="Stakeholder">
+            <FormSection title="Person Met (PDF)">
+              <Select
+                label="Met With *"
+                value={form.met_with}
+                onChange={(e) => handleMetWithChange(e.target.value)}
+                required
+              >
+                {MET_WITH_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </Select>
+              {prefilling && <p className="text-xs text-gray-400">Loading stakeholder from site...</p>}
               <div className="grid grid-cols-2 gap-4">
                 <Input label="Person Name *" value={form.stakeholder_name} onChange={(e) => setForm({ ...form, stakeholder_name: e.target.value })} placeholder="e.g. Ravi Mehta" required />
-                <Input label="Mobile" type="tel" value={form.stakeholder_mobile} onChange={(e) => setForm({ ...form, stakeholder_mobile: e.target.value })} placeholder="9812345678" />
+                <Input label="Contact Number" type="tel" value={form.stakeholder_mobile} onChange={(e) => setForm({ ...form, stakeholder_mobile: e.target.value })} placeholder="9812345678" />
               </div>
-              <Select label="Relationship Score" value={form.relationship_score} onChange={(e) => setForm({ ...form, relationship_score: e.target.value })}>
-                <option value="excellent">Excellent</option>
-                <option value="good">Good</option>
-                <option value="average">Average</option>
-                <option value="poor">Poor</option>
-                <option value="new">New Contact</option>
-              </Select>
+              <Input label="Firm Name" value={form.firm_name} onChange={(e) => setForm({ ...form, firm_name: e.target.value })} placeholder="e.g. Mehta Constructions" />
+              <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Area" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} />
+                <Input label="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Select label="Category (A–D)" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  {MEETING_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </Select>
+                <Select label="Relationship Stage *" value={form.relationship_stage} onChange={(e) => setForm({ ...form, relationship_stage: e.target.value })} required>
+                  {RELATIONSHIP_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </Select>
+              </div>
             </FormSection>
 
             <FormSection title="Relationship Scores (1–10)">
@@ -215,14 +327,26 @@ export default function MeetingsPage() {
             {meetings.map((m) => (
               <div key={m.id} className="py-3 border-b border-gray-100 last:border-0">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium">{m.stakeholder_name}</p>
-                  {m.relationship_score && (
-                    <span className="demo-badge bg-purple-50 text-purple-700 capitalize shrink-0">{m.relationship_score}</span>
-                  )}
+                  <div>
+                    <p className="font-medium">{m.stakeholder_name}</p>
+                    {m.firm_name && <p className="text-xs text-gray-500">{m.firm_name}</p>}
+                  </div>
+                  <div className="flex flex-wrap gap-1 justify-end shrink-0">
+                    {m.met_with && <span className="demo-badge bg-indigo-50 text-indigo-700">{metWithLabel(m.met_with)}</span>}
+                    {m.category && <span className="demo-badge bg-gray-100 text-gray-600">Cat {m.category}</span>}
+                    {m.relationship_stage && (
+                      <span className="demo-badge bg-purple-50 text-purple-700">{relationshipStageLabel(m.relationship_stage)}</span>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-gray-500">
-                  {siteMap[m.site_id] || 'Site'} · {m.meeting_type?.replace('_', ' ') || 'meeting'} · {new Date(m.meeting_date).toLocaleString()}
+                  {siteMap[m.site_id] || 'Site'} · {meetingTypeLabel(m.meeting_type)} · {new Date(m.meeting_date).toLocaleString()}
                 </p>
+                {(m.address || m.area || m.city) && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {[m.address, m.area, m.city].filter(Boolean).join(', ')}
+                  </p>
+                )}
                 {(m.influence_score || m.opportunity_score) && (
                   <p className="text-xs text-gray-400 mt-1">
                     Scores: Inf {m.influence_score ?? '—'} · Opp {m.opportunity_score ?? '—'} · Loy {m.loyalty_score ?? '—'}

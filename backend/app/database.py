@@ -9,7 +9,9 @@ engine = create_engine(
     pool_size=settings.database_pool_size,
     max_overflow=settings.database_max_overflow,
     pool_pre_ping=True,
+    pool_recycle=settings.database_pool_recycle,
     echo=False,
+    connect_args={"connect_timeout": 10},
 )
 
 # Create SessionLocal class

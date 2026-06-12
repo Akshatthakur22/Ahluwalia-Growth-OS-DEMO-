@@ -38,11 +38,17 @@ class AttendanceRepository(BaseRepository[AttendanceLog]):
             .all()
         )
 
-    def get_team_attendance_with_users(self, db: Session, skip: int = 0, limit: int = 100):
-        return (
+    def get_team_attendance_with_users(
+        self, db: Session, skip: int = 0, limit: int = 100, since=None,
+    ):
+        q = (
             db.query(AttendanceLog, User.full_name, User.employee_code, User.role)
             .join(User, AttendanceLog.user_id == User.id)
-            .order_by(AttendanceLog.check_in_time.desc())
+        )
+        if since is not None:
+            q = q.filter(AttendanceLog.check_in_time >= since)
+        return (
+            q.order_by(AttendanceLog.check_in_time.desc())
             .offset(skip)
             .limit(limit)
             .all()

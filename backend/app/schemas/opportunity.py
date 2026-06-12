@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from decimal import Decimal
 import uuid
@@ -64,6 +64,24 @@ class TransitionResponse(BaseModel):
     previous_status: str
     new_status: str
     transition_timestamp: datetime
+
+
+class OpportunityOwnershipBrief(BaseModel):
+    id: uuid.UUID
+    opportunity_id: uuid.UUID
+    lead_creator_id: Optional[uuid.UUID] = None
+    marketing_owner_id: Optional[uuid.UUID] = None
+    sales_owner_id: Optional[uuid.UUID] = None
+    revenue_credit: Optional[Decimal] = None
+
+    class Config:
+        from_attributes = True
+
+
+class OpportunityDetailResponse(BaseModel):
+    opportunity: OpportunityResponse
+    history: List[LifecycleHistoryResponse] = []
+    ownership: Optional[OpportunityOwnershipBrief] = None
 
 
 class LeadTransferRequest(BaseModel):

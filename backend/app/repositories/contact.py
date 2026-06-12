@@ -22,3 +22,10 @@ class ContactRepository(BaseRepository[Contact]):
 
     def get_by_site(self, db: Session, site_id) -> List[Contact]:
         return db.query(Contact).filter(Contact.site_id == site_id).all()
+
+    def get_by_site_and_type(self, db: Session, site_id, contact_type: str):
+        return (
+            db.query(Contact)
+            .filter(Contact.site_id == site_id, Contact.contact_type == contact_type)
+            .first()
+        )

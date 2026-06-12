@@ -37,9 +37,9 @@ interface AssignableUser {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  marketing_executive: 'Marketing',
-  sales_executive: 'Sales',
-  field_executive: 'Field',
+  marketing_executive: 'Marketing Associate',
+  sales_executive: 'Showroom Sales',
+  field_executive: 'Field Executive',
 };
 
 export default function AssignmentsPage() {

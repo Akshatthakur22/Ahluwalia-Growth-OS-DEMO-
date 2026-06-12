@@ -68,7 +68,8 @@ export default function AttendancePage() {
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get('/attendance/page-data', { params: { limit: 30 } });
+      const { fetchAttendancePageData } = await import('@/lib/query');
+      const data = await fetchAttendancePageData();
       setRecords(data.records);
       setToday(data.today);
       setSummary(data.summary);
@@ -93,6 +94,8 @@ export default function AttendancePage() {
         device_information: navigator.userAgent,
       });
       setMessage(`Checked in at ${new Date(data.check_in_time).toLocaleString()}`);
+      const { invalidateCache } = await import('@/lib/query');
+      invalidateCache('attendance:');
       await load();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Check-in failed');
@@ -115,6 +118,8 @@ export default function AttendancePage() {
       });
       setMessage('Checked out — route logged for management review');
       setRouteSummary('');
+      const { invalidateCache } = await import('@/lib/query');
+      invalidateCache('attendance:');
       await load();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Check-out failed');
